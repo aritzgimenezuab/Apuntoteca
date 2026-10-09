@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Folder, FolderPlus, FileText, Upload, ChevronRight, Home, ArrowLeft, Trash2, Edit3, Highlighter, Type, Save, Tag, FileUp, Search } from 'lucide-react';
+import { Folder, FolderPlus, FileText, Upload, ChevronRight, Home, ArrowLeft, Trash2, Edit3, Highlighter, Type, Save, Tag, FileUp, Search, Download, Database } from 'lucide-react';
 
 const initialStructure = {
   id: 'root',
@@ -96,21 +96,51 @@ export default function App() {
     setGlobalSearch('');
   };
 
-  // Búsqueda global recursiva por todo el árbol
+  // Exportar datos a JSON
+  const handleExportData = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(fileSystem, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", `apuntoteca_backup_${new Date().toISOString().split('T')[0]}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
+  // Importar datos desde JSON
+  const handleImportData = (e) => {
+    const fileReader = new FileReader();
+    if (e.target.files[0]) {
+      fileReader.readAsText(e.target.files[0], "UTF-8");
+      fileReader.onload = (event) => {
+        try {
+          const parsedData = JSON.parse(event.target.result);
+          if (parsedData && parsedData.id && parsedData.name) {
+            setFileSystem(parsedData);
+            alert('¡Apuntoteca importada correctamente!');
+          } else {
+            alert('El archivo no tiene un formato válido de Apuntoteca.');
+          }
+        } catch (error) {
+          alert('Error al leer el archivo JSON.');
+        }
+      };
+    }
+  };
+
+  // Búsqueda global recursiva
   const searchFilesGlobally = (node, query) => {
     let results = [];
     if (!query) return results;
 
     const lowerQuery = query.toLowerCase();
 
-    // Comprobar archivos en este nivel
     for (const file of node.files || []) {
       if (file.title.toLowerCase().includes(lowerQuery) || file.subject.toLowerCase().includes(lowerQuery) || file.author.toLowerCase().includes(lowerQuery)) {
         results.push({ ...file, folderName: node.name });
       }
     }
 
-    // Comprobar recursivamente en subcarpetas
     for (const sub of node.subfolders || []) {
       results = results.concat(searchFilesGlobally(sub, query));
     }
@@ -147,7 +177,7 @@ export default function App() {
     setIsFolderModalOpen(false);
   };
 
-  // Subir Archivo Manual
+  // Subir Archivo
   const handleUploadFile = (e) => {
     e.preventDefault();
     if (!newFileTitle.trim() || !newFileAuthor.trim()) return;
@@ -178,7 +208,7 @@ export default function App() {
     setIsFileModalOpen(false);
   };
 
-  // Subida por Drag & Drop
+  // Drag & Drop
   const handleDropFiles = (e) => {
     e.preventDefault();
     setDragOver(false);
@@ -207,7 +237,7 @@ export default function App() {
     setFileSystem(updateTreeWithDroppedFiles(fileSystem));
   };
 
-  // Borrar Carpeta o Archivo
+  // Borrar
   const handleDeleteItem = (id, type) => {
     if (!confirm(`¿Estás seguro de que quieres eliminar este ${type === 'folder' ? 'carpeta y su contenido' : 'archivo'}?`)) return;
 
@@ -229,7 +259,7 @@ export default function App() {
     setFileSystem(deleteRecursive(fileSystem));
   };
 
-  // Visor PDF interactivo
+  // Visor PDF
   const handleDocumentClick = (e) => {
     if (activeTool === 'text') {
       const rect = e.currentTarget.getBoundingClientRect();
@@ -389,20 +419,35 @@ export default function App() {
             />
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            {/* Botón Exportar */}
+            <button 
+              onClick={handleExportData}
+              className="p-2 text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer border border-slate-200"
+              title="Exportar copia de seguridad (JSON)"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+
+            {/* Botón Importar */}
+            <label className="p-2 text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer border border-slate-200 flex items-center" title="Importar copia de seguridad">
+              <Database className="w-4 h-4" />
+              <input type="file" accept=".json" onChange={handleImportData} className="hidden" />
+            </label>
+
             <button 
               onClick={() => setIsFolderModalOpen(true)}
-              className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-3.5 py-2 rounded-xl font-medium transition cursor-pointer border border-slate-200 text-sm"
+              className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-xl font-medium transition cursor-pointer border border-slate-200 text-sm"
             >
               <FolderPlus className="w-4 h-4 text-indigo-600" />
-              <span>Carpeta</span>
+              <span className="hidden sm:inline">Carpeta</span>
             </button>
             <button 
               onClick={() => setIsFileModalOpen(true)}
-              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-xl font-medium transition shadow-sm cursor-pointer text-sm"
+              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-xl font-medium transition shadow-sm cursor-pointer text-sm"
             >
               <Upload className="w-4 h-4" />
-              <span>Subir PDF</span>
+              <span className="hidden sm:inline">Subir PDF</span>
             </button>
           </div>
         </div>
@@ -422,7 +467,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* Breadcrumbs (Solo se muestran si no hay búsqueda activa) */}
+      {/* Breadcrumbs */}
       {!globalSearch.trim() && (
         <nav className="bg-white border-b border-slate-200 px-6 py-3 shadow-xs">
           <div className="max-w-6xl mx-auto flex items-center gap-2 text-sm overflow-x-auto">
@@ -448,8 +493,6 @@ export default function App() {
 
       {/* Contenido principal */}
       <main className="max-w-6xl mx-auto px-4 py-8 flex-1 w-full space-y-8">
-        
-        {/* Si el usuario está buscando, mostramos resultados globales */}
         {globalSearch.trim() ? (
           <div>
             <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-4">
@@ -501,7 +544,6 @@ export default function App() {
           </div>
         ) : (
           <>
-            {/* Subcarpetas de la carpeta actual */}
             <div>
               <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-4">Carpetas</h2>
               {currentFolder.subfolders && currentFolder.subfolders.length > 0 ? (
@@ -535,7 +577,6 @@ export default function App() {
               )}
             </div>
 
-            {/* Archivos PDF de la carpeta actual */}
             <div>
               <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-4">Documentos PDF</h2>
               {currentFolder.files && currentFolder.files.length > 0 ? (
@@ -590,7 +631,7 @@ export default function App() {
         )}
       </main>
 
-      {/* Modal Crear Carpeta */}
+      {/* Modales */}
       {isFolderModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-xl space-y-6">
@@ -627,7 +668,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Modal Subir PDF */}
       {isFileModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-xl space-y-6">
@@ -691,7 +731,7 @@ export default function App() {
 
       {/* Footer */}
       <footer className="bg-white border-t border-slate-200 py-6 mt-12 text-center text-sm text-slate-500">
-        <p>📚 <strong>Apuntoteca</strong> — Búsqueda global, almacenamiento local y visor interactivo.</p>
+        <p>📚 <strong>Apuntoteca</strong> — Exportación/Importación, carpetas infinitas y visor interactivo.</p>
       </footer>
     </div>
   );
