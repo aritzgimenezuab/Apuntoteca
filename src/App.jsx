@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
-import { Folder, FolderPlus, FileText, Upload, ChevronRight, Home, ArrowLeft, Plus, Trash2, Edit3, Highlighter, Type, Save, Tag, Search } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Folder, FolderPlus, FileText, Upload, ChevronRight, Home, ArrowLeft, Trash2, Edit3, Highlighter, Type, Save, Tag, FileUp } from 'lucide-react';
 
-// Estructura inicial en árbol de carpetas y archivos
 const initialStructure = {
   id: 'root',
   name: 'Mi Apuntoteca',
@@ -34,39 +33,70 @@ const initialStructure = {
 };
 
 export default function App() {
-  const [fileSystem, setFileSystem] = useState(initialStructure);
-  const [currentPath, setCurrentPath] = useState([initialStructure]); // Historial de navegación
-  
-  // Modales y estados de creación
+  // Cargar estado inicial desde localStorage si existe
+  const [fileSystem, setFileSystem] = useState(() => {
+    const saved = localStorage.getItem('apuntoteca_fs');
+    return saved ? JSON.parse(saved) : initialStructure;
+  });
+
+  const [currentPath, setCurrentPath] = useState([fileSystem]);
+
+  // Sincronizar el root del path cuando cambia fileSystem
+  useEffect(() => {
+    localStorage.setItem('apuntoteca_fs', JSON.stringify(fileSystem));
+    setCurrentPath(prev => {
+      const rootId = prev[0]?.id || 'root';
+      const findNode = (node, id) => {
+        if (node.id === id) return node;
+        for (const sub of node.subfolders || []) {
+          const res = findNode(sub, id);
+          if (res) return res;
+        }
+        return null;
+      };
+      
+      const newPath = [];
+      let curr = fileSystem;
+      for (const p of prev) {
+        const found = findNode(curr, p.id);
+        if (found) {
+          newPath.push(found);
+          curr = found;
+        } else {
+          break;
+        }
+      }
+      return newPath.length > 0 ? newPath : [fileSystem];
+    });
+  }, [fileSystem]);
+
+  // Modales
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   
-  // Formulario nuevo archivo
   const [newFileTitle, setNewFileTitle] = useState('');
   const [newFileSubject, setNewFileSubject] = useState('General');
   const [newFileAuthor, setNewFileAuthor] = useState('');
+  const [dragOver, setDragOver] = useState(false);
 
-  // Visor de PDF Activo
+  // Visor PDF
   const [activePdf, setActivePdf] = useState(null);
   const [activeTool, setActiveTool] = useState('cursor');
   const [highlights, setHighlights] = useState([]);
   const [customTexts, setCustomTexts] = useState([]);
 
-  // Carpeta actual abierta (la última del path)
-  const currentFolder = currentPath[currentPath.length - 1];
+  const currentFolder = currentPath[currentPath.length - 1] || fileSystem;
 
-  // Navegar a una subcarpeta
   const handleOpenFolder = (subfolder) => {
     setCurrentPath([...currentPath, subfolder]);
   };
 
-  // Navegar mediante las migas de pan (breadcrumb)
   const handleNavigateToBreadcrumb = (index) => {
     setCurrentPath(currentPath.slice(0, index + 1));
   };
 
-  // Crear nueva subcarpeta dentro de la carpeta actual
+  // Crear Carpeta
   const handleCreateFolder = (e) => {
     e.preventDefault();
     if (!newFolderName.trim()) return;
@@ -78,7 +108,6 @@ export default function App() {
       files: []
     };
 
-    // Función recursiva para actualizar el árbol de carpetas
     const updateTree = (folder) => {
       if (folder.id === currentFolder.id) {
         return { ...folder, subfolders: [...folder.subfolders, newFolderObj] };
@@ -89,27 +118,12 @@ export default function App() {
       };
     };
 
-    const updatedTree = updateTree(fileSystem);
-    setFileSystem(updatedTree);
-    
-    // Actualizar también el path actual para reflejar los cambios
-    const updatePathInTree = (folder) => {
-      if (folder.id === currentFolder.id) {
-        return { ...folder, subfolders: [...folder.subfolders, newFolderObj] };
-      }
-      return {
-        ...folder,
-        subfolders: folder.subfolders.map(updatePathInTree)
-      };
-    };
-
+    setFileSystem(updateTree(fileSystem));
     setNewFolderName('');
     setIsFolderModalOpen(false);
-    // Refrescar el path actual buscando de nuevo la carpeta
-    refreshCurrentPath(updatedTree, currentPath.map(p => p.id));
   };
 
-  // Subir nuevo archivo PDF a la carpeta actual
+  // Subir Archivo Manual
   const handleUploadFile = (e) => {
     e.preventDefault();
     if (!newFileTitle.trim() || !newFileAuthor.trim()) return;
@@ -134,34 +148,64 @@ export default function App() {
       };
     };
 
-    const updatedTree = updateTreeWithFile(fileSystem);
-    setFileSystem(updatedTree);
-    refreshCurrentPath(updatedTree, currentPath.map(p => p.id));
-
+    setFileSystem(updateTreeWithFile(fileSystem));
     setNewFileTitle('');
     setNewFileAuthor('');
     setIsFileModalOpen(false);
   };
 
-  // Función auxiliar para mantener sincronizado el path de navegación
-  const refreshCurrentPath = (tree, pathIds) => {
-    const newPath = [];
-    let current = tree;
-    for (const id of pathIds) {
-      if (current.id === id) {
-        newPath.push(current);
-      } else {
-        const found = current.subfolders.find(f => f.id === id);
-        if (found) {
-          newPath.push(found);
-          current = found;
-        }
+  // Subida por Drag & Drop de archivos reales
+  const handleDropFiles = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    
+    const newFiles = droppedFiles.map(file => ({
+      id: 'file-' + Date.now() + '-' + Math.random(),
+      title: file.name.replace(/\.[^/.]+$/, ""),
+      subject: currentFolder.name !== 'Mi Apuntoteca' ? currentFolder.name : 'General',
+      author: 'Usuario',
+      date: new Date().toISOString().split('T')[0],
+      size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+      contentPreview: `Contenido extraído de ${file.name}. Listo para análisis, estudio y anotaciones interactivas.`
+    }));
+
+    const updateTreeWithDroppedFiles = (folder) => {
+      if (folder.id === currentFolder.id) {
+        return { ...folder, files: [...folder.files, ...newFiles] };
       }
-    }
-    if (newPath.length > 0) setCurrentPath(newPath);
+      return {
+        ...folder,
+        subfolders: folder.subfolders.map(updateTreeWithDroppedFiles)
+      };
+    };
+
+    setFileSystem(updateTreeWithDroppedFiles(fileSystem));
   };
 
-  // Herramientas del Visor de PDF
+  // Borrar Carpeta o Archivo
+  const handleDeleteItem = (id, type) => {
+    if (!confirm(`¿Estás seguro de que quieres eliminar este ${type === 'folder' ? 'carpeta y su contenido' : 'archivo'}?`)) return;
+
+    const deleteRecursive = (folder) => {
+      if (type === 'folder') {
+        return {
+          ...folder,
+          subfolders: folder.subfolders.filter(f => f.id !== id).map(deleteRecursive)
+        };
+      } else {
+        return {
+          ...folder,
+          files: folder.files.filter(f => f.id !== id),
+          subfolders: folder.subfolders.map(deleteRecursive)
+        };
+      }
+    };
+
+    setFileSystem(deleteRecursive(fileSystem));
+  };
+
+  // Visor PDF interactivo
   const handleDocumentClick = (e) => {
     if (activeTool === 'text') {
       const rect = e.currentTarget.getBoundingClientRect();
@@ -183,7 +227,6 @@ export default function App() {
     }
   };
 
-  // Si hay un PDF abierto, mostramos el visor de estudio
   if (activePdf) {
     return (
       <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col">
@@ -227,7 +270,7 @@ export default function App() {
           </div>
 
           <button 
-            onClick={() => alert('¡Anotaciones guardadas correctamente en tu sesión!')}
+            onClick={() => alert('¡Anotaciones guardadas correctamente en tu navegador!')}
             className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition shadow-sm cursor-pointer"
           >
             <Save className="w-4 h-4" />
@@ -254,7 +297,7 @@ export default function App() {
             </p>
 
             <p className="text-lg text-slate-700 mb-6">
-              Utiliza las herramientas superiores para seleccionar texto, subrayarlo con color ámbar o hacer clic en cualquier parte de la página para añadir notas flotantes personalizadas.
+              Selecciona texto para subrayarlo o haz clic en cualquier zona para dejar notas adhesivas flotantes guardadas localmente.
             </p>
 
             {highlights.length > 0 && (
@@ -286,9 +329,21 @@ export default function App() {
     );
   }
 
-  // Vista principal de navegación por carpetas
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div 
+      className="min-h-screen bg-slate-50 flex flex-col"
+      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={handleDropFiles}
+    >
+      {/* Banner Drag & Drop activo */}
+      {dragOver && (
+        <div className="fixed inset-0 bg-indigo-950/80 backdrop-blur-md z-50 flex flex-col items-center justify-center text-white space-y-4 pointer-events-none">
+          <FileUp className="w-16 h-16 animate-bounce text-indigo-400" />
+          <p className="text-2xl font-bold">Suelta tus PDFs aquí para subirlos a esta carpeta</p>
+        </div>
+      )}
+
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-30">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -318,7 +373,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* Migas de pan (Breadcrumbs) para navegar por subcarpetas infinitas */}
+      {/* Breadcrumbs */}
       <nav className="bg-white border-b border-slate-200 px-6 py-3 shadow-xs">
         <div className="max-w-6xl mx-auto flex items-center gap-2 text-sm">
           {currentPath.map((folder, index) => (
@@ -340,39 +395,46 @@ export default function App() {
         </div>
       </nav>
 
-      {/* Contenido de la carpeta actual */}
+      {/* Contenido */}
       <main className="max-w-6xl mx-auto px-4 py-8 flex-1 w-full space-y-8">
-        
-        {/* Sección de Subcarpetas */}
+        {/* Subcarpetas */}
         <div>
           <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-4">Carpetas</h2>
-          {currentFolder.subfolders.length > 0 ? (
+          {currentFolder.subfolders && currentFolder.subfolders.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {currentFolder.subfolders.map(subfolder => (
                 <div 
                   key={subfolder.id}
-                  onClick={() => handleOpenFolder(subfolder)}
-                  className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs hover:shadow-md hover:border-indigo-300 transition cursor-pointer flex items-center justify-between group"
+                  className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs hover:shadow-md hover:border-indigo-300 transition flex items-center justify-between group"
                 >
-                  <div className="flex items-center gap-3 truncate">
+                  <div 
+                    onClick={() => handleOpenFolder(subfolder)}
+                    className="flex items-center gap-3 truncate flex-1 cursor-pointer"
+                  >
                     <div className="bg-indigo-50 text-indigo-600 p-2.5 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition">
                       <Folder className="w-5 h-5" />
                     </div>
                     <span className="font-semibold text-slate-800 truncate">{subfolder.name}</span>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 transition" />
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); handleDeleteItem(subfolder.id, 'folder'); }}
+                    className="text-slate-300 hover:text-red-500 p-1.5 rounded-lg transition cursor-pointer"
+                    title="Eliminar carpeta"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-400 italic">No hay carpetas en este nivel. Crea una nueva arriba.</p>
+            <p className="text-sm text-slate-400 italic">No hay carpetas en este nivel.</p>
           )}
         </div>
 
-        {/* Sección de Archivos PDF */}
+        {/* Archivos PDF */}
         <div>
           <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-4">Documentos PDF</h2>
-          {currentFolder.files.length > 0 ? (
+          {currentFolder.files && currentFolder.files.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {currentFolder.files.map(file => (
                 <div key={file.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs hover:shadow-md transition flex flex-col justify-between">
@@ -382,7 +444,13 @@ export default function App() {
                         <Tag className="w-3 h-3" />
                         {file.subject}
                       </span>
-                      <span className="text-xs text-slate-400">{file.date}</span>
+                      <button 
+                        onClick={() => handleDeleteItem(file.id, 'file')}
+                        className="text-slate-300 hover:text-red-500 p-1 transition cursor-pointer"
+                        title="Eliminar archivo"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
 
                     <h3 className="font-semibold text-slate-900 text-lg leading-snug">
@@ -410,24 +478,24 @@ export default function App() {
           ) : (
             <div className="py-12 text-center bg-white border border-dashed border-slate-200 rounded-3xl space-y-2">
               <FileText className="w-10 h-10 text-slate-300 mx-auto" />
-              <p className="text-slate-500 font-medium text-sm">No hay PDFs en esta carpeta.</p>
+              <p className="text-slate-500 font-medium text-sm">No hay PDFs en esta carpeta. Arrastra archivos aquí o súbelos arriba.</p>
             </div>
           )}
         </div>
       </main>
 
-      {/* Modal para Crear Subcarpeta */}
+      {/* Modal Crear Carpeta */}
       {isFolderModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-xl space-y-6">
             <h2 className="text-xl font-bold text-slate-900">Crear nueva carpeta</h2>
             <form onSubmit={handleCreateFolder} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Nombre de la carpeta o asignatura</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Nombre de la carpeta</label>
                 <input 
                   type="text" 
                   required
-                  placeholder="Ej: 2n Curs, Biofísica, Apuntes..."
+                  placeholder="Ej: Apuntes, Teoría, Exámenes..."
                   value={newFolderName}
                   onChange={(e) => setNewFolderName(e.target.value)}
                   className="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
@@ -453,18 +521,18 @@ export default function App() {
         </div>
       )}
 
-      {/* Modal para Subir PDF */}
+      {/* Modal Subir PDF */}
       {isFileModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-xl space-y-6">
-            <h2 className="text-xl font-bold text-slate-900">Subir PDF en esta carpeta</h2>
+            <h2 className="text-xl font-bold text-slate-900">Subir PDF</h2>
             <form onSubmit={handleUploadFile} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Título del apunte</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Título</label>
                 <input 
                   type="text" 
                   required
-                  placeholder="Ej: Tema 3 - Sistema Nervioso"
+                  placeholder="Ej: Tema 2"
                   value={newFileTitle}
                   onChange={(e) => setNewFileTitle(e.target.value)}
                   className="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
@@ -476,7 +544,7 @@ export default function App() {
                 <input 
                   type="text" 
                   required
-                  placeholder="Ej: Fisiología"
+                  placeholder="Ej: Biofísica"
                   value={newFileSubject}
                   onChange={(e) => setNewFileSubject(e.target.value)}
                   className="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
@@ -517,7 +585,7 @@ export default function App() {
 
       {/* Footer */}
       <footer className="bg-white border-t border-slate-200 py-6 mt-12 text-center text-sm text-slate-500">
-        <p>📚 <strong>Apuntoteca</strong> — Sistema de archivos y estudio interactivo.</p>
+        <p>📚 <strong>Apuntoteca</strong> — Almacenamiento local, carpetas infinitas y visor interactivo.</p>
       </footer>
     </div>
   );
