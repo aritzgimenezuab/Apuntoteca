@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Folder, FolderPlus, FileText, Upload, ChevronRight, Home, ArrowLeft, Trash2, Edit3, Highlighter, Type, Save, Tag, FileUp } from 'lucide-react';
+import { Folder, FolderPlus, FileText, Upload, ChevronRight, Home, ArrowLeft, Trash2, Edit3, Highlighter, Type, Save, Tag, FileUp, Search } from 'lucide-react';
 
 const initialStructure = {
   id: 'root',
@@ -33,19 +33,17 @@ const initialStructure = {
 };
 
 export default function App() {
-  // Cargar estado inicial desde localStorage si existe
   const [fileSystem, setFileSystem] = useState(() => {
     const saved = localStorage.getItem('apuntoteca_fs');
     return saved ? JSON.parse(saved) : initialStructure;
   });
 
   const [currentPath, setCurrentPath] = useState([fileSystem]);
+  const [globalSearch, setGlobalSearch] = useState('');
 
-  // Sincronizar el root del path cuando cambia fileSystem
   useEffect(() => {
     localStorage.setItem('apuntoteca_fs', JSON.stringify(fileSystem));
     setCurrentPath(prev => {
-      const rootId = prev[0]?.id || 'root';
       const findNode = (node, id) => {
         if (node.id === id) return node;
         for (const sub of node.subfolders || []) {
@@ -90,11 +88,37 @@ export default function App() {
 
   const handleOpenFolder = (subfolder) => {
     setCurrentPath([...currentPath, subfolder]);
+    setGlobalSearch('');
   };
 
   const handleNavigateToBreadcrumb = (index) => {
     setCurrentPath(currentPath.slice(0, index + 1));
+    setGlobalSearch('');
   };
+
+  // Búsqueda global recursiva por todo el árbol
+  const searchFilesGlobally = (node, query) => {
+    let results = [];
+    if (!query) return results;
+
+    const lowerQuery = query.toLowerCase();
+
+    // Comprobar archivos en este nivel
+    for (const file of node.files || []) {
+      if (file.title.toLowerCase().includes(lowerQuery) || file.subject.toLowerCase().includes(lowerQuery) || file.author.toLowerCase().includes(lowerQuery)) {
+        results.push({ ...file, folderName: node.name });
+      }
+    }
+
+    // Comprobar recursivamente en subcarpetas
+    for (const sub of node.subfolders || []) {
+      results = results.concat(searchFilesGlobally(sub, query));
+    }
+
+    return results;
+  };
+
+  const searchResults = globalSearch.trim() ? searchFilesGlobally(fileSystem, globalSearch) : [];
 
   // Crear Carpeta
   const handleCreateFolder = (e) => {
@@ -154,7 +178,7 @@ export default function App() {
     setIsFileModalOpen(false);
   };
 
-  // Subida por Drag & Drop de archivos reales
+  // Subida por Drag & Drop
   const handleDropFiles = (e) => {
     e.preventDefault();
     setDragOver(false);
@@ -336,7 +360,6 @@ export default function App() {
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDropFiles}
     >
-      {/* Banner Drag & Drop activo */}
       {dragOver && (
         <div className="fixed inset-0 bg-indigo-950/80 backdrop-blur-md z-50 flex flex-col items-center justify-center text-white space-y-4 pointer-events-none">
           <FileUp className="w-16 h-16 animate-bounce text-indigo-400" />
@@ -346,7 +369,7 @@ export default function App() {
 
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-30">
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="bg-indigo-600 p-2 rounded-xl text-white shadow-sm flex items-center justify-center">
               <Folder className="w-6 h-6" />
@@ -354,17 +377,29 @@ export default function App() {
             <span className="font-extrabold text-xl tracking-tight text-slate-900">Apuntoteca</span>
           </div>
 
+          {/* Buscador Global */}
+          <div className="relative flex-1 max-w-md hidden md:block">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+            <input 
+              type="text" 
+              placeholder="Buscar apuntes o asignaturas en todo el sistema..."
+              value={globalSearch}
+              onChange={(e) => setGlobalSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-slate-100 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition"
+            />
+          </div>
+
           <div className="flex items-center gap-3">
             <button 
               onClick={() => setIsFolderModalOpen(true)}
-              className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl font-medium transition cursor-pointer border border-slate-200 text-sm"
+              className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-3.5 py-2 rounded-xl font-medium transition cursor-pointer border border-slate-200 text-sm"
             >
               <FolderPlus className="w-4 h-4 text-indigo-600" />
-              <span>Nueva Carpeta</span>
+              <span>Carpeta</span>
             </button>
             <button 
               onClick={() => setIsFileModalOpen(true)}
-              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-medium transition shadow-sm cursor-pointer text-sm"
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-xl font-medium transition shadow-sm cursor-pointer text-sm"
             >
               <Upload className="w-4 h-4" />
               <span>Subir PDF</span>
@@ -373,115 +408,186 @@ export default function App() {
         </div>
       </header>
 
-      {/* Breadcrumbs */}
-      <nav className="bg-white border-b border-slate-200 px-6 py-3 shadow-xs">
-        <div className="max-w-6xl mx-auto flex items-center gap-2 text-sm">
-          {currentPath.map((folder, index) => (
-            <React.Fragment key={folder.id}>
-              {index > 0 && <ChevronRight className="w-4 h-4 text-slate-400" />}
-              <button 
-                onClick={() => handleNavigateToBreadcrumb(index)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
-                  index === currentPath.length - 1 
-                    ? 'bg-indigo-50 text-indigo-700 font-semibold' 
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                {index === 0 ? <Home className="w-4 h-4" /> : <Folder className="w-4 h-4" />}
-                <span>{folder.name}</span>
-              </button>
-            </React.Fragment>
-          ))}
+      {/* Buscador responsive móvil */}
+      <div className="md:hidden px-4 pt-3 bg-white border-b border-slate-200 pb-3">
+        <div className="relative w-full">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+          <input 
+            type="text" 
+            placeholder="Buscar apuntes en todo el sistema..."
+            value={globalSearch}
+            onChange={(e) => setGlobalSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-slate-100 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+          />
         </div>
-      </nav>
+      </div>
 
-      {/* Contenido */}
-      <main className="max-w-6xl mx-auto px-4 py-8 flex-1 w-full space-y-8">
-        {/* Subcarpetas */}
-        <div>
-          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-4">Carpetas</h2>
-          {currentFolder.subfolders && currentFolder.subfolders.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {currentFolder.subfolders.map(subfolder => (
-                <div 
-                  key={subfolder.id}
-                  className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs hover:shadow-md hover:border-indigo-300 transition flex items-center justify-between group"
+      {/* Breadcrumbs (Solo se muestran si no hay búsqueda activa) */}
+      {!globalSearch.trim() && (
+        <nav className="bg-white border-b border-slate-200 px-6 py-3 shadow-xs">
+          <div className="max-w-6xl mx-auto flex items-center gap-2 text-sm overflow-x-auto">
+            {currentPath.map((folder, index) => (
+              <React.Fragment key={folder.id}>
+                {index > 0 && <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
+                <button 
+                  onClick={() => handleNavigateToBreadcrumb(index)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition cursor-pointer whitespace-nowrap ${
+                    index === currentPath.length - 1 
+                      ? 'bg-indigo-50 text-indigo-700 font-semibold' 
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
                 >
-                  <div 
-                    onClick={() => handleOpenFolder(subfolder)}
-                    className="flex items-center gap-3 truncate flex-1 cursor-pointer"
-                  >
-                    <div className="bg-indigo-50 text-indigo-600 p-2.5 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition">
-                      <Folder className="w-5 h-5" />
-                    </div>
-                    <span className="font-semibold text-slate-800 truncate">{subfolder.name}</span>
-                  </div>
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); handleDeleteItem(subfolder.id, 'folder'); }}
-                    className="text-slate-300 hover:text-red-500 p-1.5 rounded-lg transition cursor-pointer"
-                    title="Eliminar carpeta"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-slate-400 italic">No hay carpetas en este nivel.</p>
-          )}
-        </div>
+                  {index === 0 ? <Home className="w-4 h-4" /> : <Folder className="w-4 h-4" />}
+                  <span>{folder.name}</span>
+                </button>
+              </React.Fragment>
+            ))}
+          </div>
+        </nav>
+      )}
 
-        {/* Archivos PDF */}
-        <div>
-          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-4">Documentos PDF</h2>
-          {currentFolder.files && currentFolder.files.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {currentFolder.files.map(file => (
-                <div key={file.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs hover:shadow-md transition flex flex-col justify-between">
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-lg">
-                        <Tag className="w-3 h-3" />
-                        {file.subject}
-                      </span>
+      {/* Contenido principal */}
+      <main className="max-w-6xl mx-auto px-4 py-8 flex-1 w-full space-y-8">
+        
+        {/* Si el usuario está buscando, mostramos resultados globales */}
+        {globalSearch.trim() ? (
+          <div>
+            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-4">
+              Resultados de la búsqueda para "{globalSearch}" ({searchResults.length})
+            </h2>
+            {searchResults.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {searchResults.map(file => (
+                  <div key={file.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs hover:shadow-md transition flex flex-col justify-between">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-lg">
+                          <Tag className="w-3 h-3" />
+                          {file.subject}
+                        </span>
+                        <span className="text-xs text-indigo-600 font-medium bg-indigo-50/50 px-2 py-0.5 rounded">
+                          📁 {file.folderName}
+                        </span>
+                      </div>
+
+                      <h3 className="font-semibold text-slate-900 text-lg leading-snug">
+                        {file.title}
+                      </h3>
+
+                      <p className="text-sm text-slate-500">
+                        Subido por <span className="font-medium text-slate-700">{file.author}</span>
+                      </p>
+                    </div>
+
+                    <div className="pt-6 mt-4 border-t border-slate-100 flex items-center justify-between">
+                      <span className="text-xs text-slate-400 font-medium">{file.size}</span>
                       <button 
-                        onClick={() => handleDeleteItem(file.id, 'file')}
-                        className="text-slate-300 hover:text-red-500 p-1 transition cursor-pointer"
-                        title="Eliminar archivo"
+                        onClick={() => setActivePdf(file)}
+                        className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-3.5 py-2 rounded-xl transition shadow-sm cursor-pointer"
+                      >
+                        <FileText className="w-4 h-4" />
+                        <span>Abrir y Estudiar</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="py-16 text-center bg-white border border-slate-200 rounded-3xl space-y-2">
+                <Search className="w-10 h-10 text-slate-300 mx-auto" />
+                <p className="text-slate-600 font-medium">No se han encontrado apuntes con ese término en ninguna carpeta.</p>
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            {/* Subcarpetas de la carpeta actual */}
+            <div>
+              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-4">Carpetas</h2>
+              {currentFolder.subfolders && currentFolder.subfolders.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {currentFolder.subfolders.map(subfolder => (
+                    <div 
+                      key={subfolder.id}
+                      className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs hover:shadow-md hover:border-indigo-300 transition flex items-center justify-between group"
+                    >
+                      <div 
+                        onClick={() => handleOpenFolder(subfolder)}
+                        className="flex items-center gap-3 truncate flex-1 cursor-pointer"
+                      >
+                        <div className="bg-indigo-50 text-indigo-600 p-2.5 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition">
+                          <Folder className="w-5 h-5" />
+                        </div>
+                        <span className="font-semibold text-slate-800 truncate">{subfolder.name}</span>
+                      </div>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); handleDeleteItem(subfolder.id, 'folder'); }}
+                        className="text-slate-300 hover:text-red-500 p-1.5 rounded-lg transition cursor-pointer"
+                        title="Eliminar carpeta"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
-
-                    <h3 className="font-semibold text-slate-900 text-lg leading-snug">
-                      {file.title}
-                    </h3>
-
-                    <p className="text-sm text-slate-500">
-                      Subido por <span className="font-medium text-slate-700">{file.author}</span>
-                    </p>
-                  </div>
-
-                  <div className="pt-6 mt-4 border-t border-slate-100 flex items-center justify-between">
-                    <span className="text-xs text-slate-400 font-medium">{file.size}</span>
-                    <button 
-                      onClick={() => setActivePdf(file)}
-                      className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-3.5 py-2 rounded-xl transition shadow-sm cursor-pointer"
-                    >
-                      <FileText className="w-4 h-4" />
-                      <span>Abrir y Estudiar</span>
-                    </button>
-                  </div>
+                  ))}
                 </div>
-              ))}
+              ) : (
+                <p className="text-sm text-slate-400 italic">No hay carpetas en este nivel.</p>
+              )}
             </div>
-          ) : (
-            <div className="py-12 text-center bg-white border border-dashed border-slate-200 rounded-3xl space-y-2">
-              <FileText className="w-10 h-10 text-slate-300 mx-auto" />
-              <p className="text-slate-500 font-medium text-sm">No hay PDFs en esta carpeta. Arrastra archivos aquí o súbelos arriba.</p>
+
+            {/* Archivos PDF de la carpeta actual */}
+            <div>
+              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-4">Documentos PDF</h2>
+              {currentFolder.files && currentFolder.files.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {currentFolder.files.map(file => (
+                    <div key={file.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs hover:shadow-md transition flex flex-col justify-between">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-lg">
+                            <Tag className="w-3 h-3" />
+                            {file.subject}
+                          </span>
+                          <button 
+                            onClick={() => handleDeleteItem(file.id, 'file')}
+                            className="text-slate-300 hover:text-red-500 p-1 transition cursor-pointer"
+                            title="Eliminar archivo"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        <h3 className="font-semibold text-slate-900 text-lg leading-snug">
+                          {file.title}
+                        </h3>
+
+                        <p className="text-sm text-slate-500">
+                          Subido por <span className="font-medium text-slate-700">{file.author}</span>
+                        </p>
+                      </div>
+
+                      <div className="pt-6 mt-4 border-t border-slate-100 flex items-center justify-between">
+                        <span className="text-xs text-slate-400 font-medium">{file.size}</span>
+                        <button 
+                          onClick={() => setActivePdf(file)}
+                          className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-3.5 py-2 rounded-xl transition shadow-sm cursor-pointer"
+                        >
+                          <FileText className="w-4 h-4" />
+                          <span>Abrir y Estudiar</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-12 text-center bg-white border border-dashed border-slate-200 rounded-3xl space-y-2">
+                  <FileText className="w-10 h-10 text-slate-300 mx-auto" />
+                  <p className="text-slate-500 font-medium text-sm">No hay PDFs en esta carpeta. Arrastra archivos aquí o súbelos arriba.</p>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </>
+        )}
       </main>
 
       {/* Modal Crear Carpeta */}
@@ -585,7 +691,7 @@ export default function App() {
 
       {/* Footer */}
       <footer className="bg-white border-t border-slate-200 py-6 mt-12 text-center text-sm text-slate-500">
-        <p>📚 <strong>Apuntoteca</strong> — Almacenamiento local, carpetas infinitas y visor interactivo.</p>
+        <p>📚 <strong>Apuntoteca</strong> — Búsqueda global, almacenamiento local y visor interactivo.</p>
       </footer>
     </div>
   );
