@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apuntoteca - Tu plataforma de apuntes</title>
+    <!-- Tailwind CSS para el diseño profesional -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React y ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel para compilar JSX directamente en el navegador -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Iconos de Lucide -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-slate-50 text-slate-900 antialiased selection:bg-indigo-500 selection:text-white">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const initialNotes = [
+          {
+            id: 1,
+            title: 'Resumen Tema 1: Fisiología Celular y Biofísica',
+            subject: 'Biofísica',
+            author: 'Equipo Docente',
+            date: '2026-09-15',
+            downloads: 42,
+            fileType: 'PDF',
+            size: '2.4 MB',
+            contentPreview: 'La membrana celular actúa como una barrera semipermeable que regula el transporte de iones y moléculas. El potencial de membrana en reposo es fundamental para la transmisión de impulsos nerviosos y la contracción muscular...'
+          },
+          {
+            id: 2,
+            title: 'Guía de Diagnóstico por la Imagen y Radiología',
+            subject: 'Diagnóstico por la Imagen',
+            author: 'Marina G.',
+            date: '2026-09-22',
+            downloads: 28,
+            fileType: 'PDF',
+            size: '5.1 MB',
+            contentPreview: 'Los rayos X atraviesan los tejidos corporales de forma diferencial según su densidad. Los tejidos densos como el hueso absorben mayor radiación y se visualizan de color blanco (radiopacos), mientras que el aire se ve negro (radiolúcido)...'
+          },
+          {
+            id: 3,
+            title: 'Esquemas de Anatomía Humana - Miembro Inferior',
+            subject: 'Anatomía',
+            author: 'Carlos R.',
+            date: '2026-10-02',
+            downloads: 65,
+            fileType: 'PDF',
+            size: '8.3 MB',
+            contentPreview: 'El miembro inferior comprende la cadera, el muslo, la rodilla, la pierna, el tobillo y el pie. Los principales grupos musculares del muslo se dividen en compartimento anterior (cuádriceps), posterior (isquiotibiales) y medial (aductores)...'
+          }
+        ];
+
+        function App() {
+          const [notes, setNotes] = useState(initialNotes);
+          const [searchTerm, setSearchTerm] = useState('');
+          const [selectedSubject, setSelectedSubject] = useState('Todas');
+          const [isModalOpen, setIsModalOpen] = useState(false);
+          const [successMessage, setSuccessMessage] = useState(false);
+
+          const [activeNote, setActiveNote] = useState(null);
+          const [activeTool, setActiveTool] = useState('cursor');
+          const [highlights, setHighlights] = useState([]);
+          const [customTexts, setCustomTexts] = useState([]);
+
+          const [newTitle, setNewTitle] = useState('');
+          const [newSubject, setNewSubject] = useState('Biofísica');
+          const [newAuthor, setNewAuthor] = useState('');
+
+          const subjects = ['Todas', 'Biofísica', 'Diagnóstico por la Imagen', 'Anatomía', 'Fisiología', 'Otros'];
+
+          useEffect(() => {
+            lucide.createIcons();
+          }, [activeNote, isModalOpen, notes]);
+
+          const filteredNotes = notes.filter(note => {
+            const matchesSearch = note.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                  note.author.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesSubject = selectedSubject === 'Todas' || note.subject === selectedSubject;
+            return matchesSearch && matchesSubject;
+          });
+
+          const handleUploadSubmit = (e) => {
+            e.preventDefault();
+            if (!newTitle || !newAuthor) return;
+
+            const newNoteObj = {
+              id: notes.length + 1,
+              title: newTitle,
+              subject: newSubject,
+              author: newAuthor,
+              date: new Date().toISOString().split('T')[0],
+              downloads: 0,
+              fileType: 'PDF',
+              size: '1.8 MB',
+              contentPreview: 'Documento subido por el usuario. Contenido listo para estudiar, subrayar y anotar en Apuntoteca.'
+            };
+
+            setNotes([newNoteObj, ...notes]);
+            setIsModalOpen(false);
+            setNewTitle('');
+            setNewAuthor('');
+            setSuccessMessage(true);
+            setTimeout(() => setSuccessMessage(false), 3000);
+          };
+
+          const handleDocumentClick = (e) => {
+            if (activeTool === 'text') {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const x = e.clientX - rect.left;
+              const y = e.clientY - rect.top;
+              
+              const textToAdd = prompt('Introduce el texto o nota que quieres añadir:');
+              if (textToAdd) {
+                setCustomTexts([...customTexts, { id: Date.now(), x, y, text: textToAdd }]);
+              }
+              setActiveTool('cursor');
+            }
+          };
+
+          const handleTextHighlight = () => {
+            const selection = window.getSelection().toString();
+            if (selection) {
+              setHighlights([...highlights, { id: Date.now(), text: selection }]);
+            }
+          };
+
+          if (activeNote) {
+            return (
+              <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col">
+                <header className="bg-slate-800 border-b border-slate-700 px-6 py-4 flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <button 
+                      onClick={() => setActiveNote(null)}
+                      className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 px-3.5 py-2 rounded-xl text-sm font-medium transition cursor-pointer"
+                    >
+                      <i data-lucide="arrow-left" className="w-4 h-4"></i>
+                      <span>Volver a Apuntoteca</span>
+                    </button>
+                    <div>
+                      <h2 className="font-bold text-lg text-white truncate max-w-md">{activeNote.title}</h2>
+                      <span className="text-xs text-emerald-400 font-medium">{activeNote.subject}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 bg-slate-900 p-1.5 rounded-2xl border border-slate-700">
+                    <button 
+                      onClick={() => setActiveTool('cursor')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition cursor-pointer ${activeTool === 'cursor' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                    >
+                      <i data-lucide="edit-3" className="w-4 h-4"></i>
+                      <span>Seleccionar</span>
+                    </button>
+                    <button 
+                      onClick={() => setActiveTool('highlight')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition cursor-pointer ${activeTool === 'highlight' ? 'bg-amber-500 text-slate-950 font-semibold' : 'text-slate-400 hover:text-white'}`}
+                    >
+                      <i data-lucide="highlighter" className="w-4 h-4"></i>
+                      <span>Subrayar</span>
+                    </button>
+                    <button 
+                      onClick={() => setActiveTool('text')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition cursor-pointer ${activeTool === 'text' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                    >
+                      <i data-lucide="type" className="w-4 h-4"></i>
+                      <span>Añadir Nota</span>
+                    </button>
+                  </div>
+
+                  <button 
+                    onClick={() => alert('¡Anotaciones guardadas correctamente!')}
+                    className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition shadow-sm cursor-pointer"
+                  >
+                    <i data-lucide="save" className="w-4 h-4"></i>
+                    <span>Guardar cambios</span>
+                  </button>
+                </header>
+
+                <main className="flex-1 max-w-4xl w-full mx-auto p-8 relative">
+                  <div 
+                    onClick={handleDocumentClick}
+                    onMouseUp={activeTool === 'highlight' ? handleTextHighlight : undefined}
+                    className="bg-white text-slate-900 p-12 rounded-3xl shadow-2xl min-h-[700px] relative font-serif leading-relaxed select-text cursor-crosshair"
+                  >
+                    <div className="absolute top-6 right-6 text-xs text-slate-400 font-sans">
+                      Visor Interactivo • Apuntoteca
+                    </div>
+
+                    <h1 className="text-2xl font-bold font-sans text-slate-900 mb-6 border-b pb-4">
+                      {activeNote.title}
+                    </h1>
+
+                    <p className="text-lg text-slate-700 mb-6">
+                      {activeNote.contentPreview}
+                    </p>
+
+                    <p className="text-lg text-slate-700 mb-6">
+                      Haz clic en "Subrayar" y selecciona cualquier fragmento de texto con el ratón para resaltarlo, o haz clic en "Añadir Nota" para dejar comentarios flotantes en el documento.
+                    </p>
+
+                    {highlights.length > 0 && (
+                      <div className="mt-8 p-4 bg-amber-50 border-l-4 border-amber-400 rounded-r-xl font-sans">
+                        <h4 className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-2">Tus subrayados:</h4>
+                        <ul className="space-y-1 text-sm text-amber-900">
+                          {highlights.map(h => (
+                            <li key={h.id} className="bg-amber-200/50 px-2 py-1 rounded">"{h.text}"</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {customTexts.map(t => (
+                      <div 
+                        key={t.id} 
+                        style={{ top: t.y, left: t.x }}
+                        className="absolute bg-indigo-50 border border-indigo-200 text-indigo-900 text-sm px-3 py-2 rounded-xl shadow-lg font-sans max-w-xs z-20 flex items-center justify-between gap-2"
+                      >
+                        <span>{t.text}</span>
+                        <button onClick={() => setCustomTexts(customTexts.filter(item => item.id !== t.id))} className="text-indigo-400 hover:text-indigo-700 cursor-pointer">
+                          <i data-lucide="x" className="w-3 h-3"></i>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </main>
+              </div>
+            );
+          }
+
+          return (
+            <div className="min-h-screen bg-slate-50 flex flex-col">
+              <header className="bg-white border-b border-slate-200 sticky top-0 z-30">
+                <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-indigo-600 p-2 rounded-xl text-white shadow-sm flex items-center justify-center">
+                      <i data-lucide="book-open" className="w-6 h-6"></i>
+                    </div>
+                    <span className="font-extrabold text-xl tracking-tight text-slate-900">Apuntoteca</span>
+                  </div>
+                  <button 
+                    onClick={() => setIsModalOpen(true)}
+                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-medium transition shadow-sm cursor-pointer"
+                  >
+                    <i data-lucide="upload" className="w-4 h-4"></i>
+                    <span>Subir PDF</span>
+                  </button>
+                </div>
+              </header>
+
+              {successMessage && (
+                <div className="bg-emerald-500 text-white py-3 px-4 text-center font-medium flex items-center justify-center gap-2">
+                  <i data-lucide="check-circle" className="w-5 h-5"></i>
+                  ¡PDF subido correctamente a tu Apuntoteca!
+                </div>
+              )}
+
+              <section className="bg-gradient-to-b from-white to-slate-100 py-12 px-4 border-b border-slate-200">
+                <div className="max-w-3xl mx-auto text-center space-y-4">
+                  <h1 className="text-4xl font-extrabold text-slate-900 tracking-tight">
+                    Tu biblioteca digital de apuntes y PDFs
+                  </h1>
+                  <p className="text-slate-600 text-lg">
+                    Sube tus documentos, ábrelos online, subraya lo importante y añade notas al instante.
+                  </p>
+
+                  <div className="relative max-w-xl mx-auto pt-4">
+                    <i data-lucide="search" className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 mt-2"></i>
+                    <input 
+                      type="text" 
+                      placeholder="Busca por título o asignatura..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full pl-12 pr-4 py-3 bg-white border border-slate-300 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
+                    />
+                  </div>
+                </div>
+              </section>
+
+              <main className="max-w-6xl mx-auto px-4 py-8 flex-1 w-full space-y-6">
+                <div className="flex items-center gap-2 overflow-x-auto pb-2">
+                  {subjects.map(subject => (
+                    <button
+                      key={subject}
+                      onClick={() => setSelectedSubject(subject)}
+                      className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition cursor-pointer ${
+                        selectedSubject === subject 
+                          ? 'bg-slate-900 text-white shadow-sm' 
+                          : 'bg-white text-slate-600 hover:bg-slate-200 border border-slate-200'
+                      }`}
+                    >
+                      {subject}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredNotes.length > 0 ? (
+                    filteredNotes.map(note => (
+                      <div key={note.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-lg">
+                              <i data-lucide="tag" className="w-3 h-3"></i>
+                              {note.subject}
+                            </span>
+                            <span className="text-xs text-slate-400">{note.date}</span>
+                          </div>
+
+                          <h3 className="font-semibold text-slate-900 text-lg leading-snug">
+                            {note.title}
+                          </h3>
+
+                          <p className="text-sm text-slate-500">
+                            Subido por <span className="font-medium text-slate-700">{note.author}</span>
+                          </p>
+                        </div>
+
+                        <div className="pt-6 mt-4 border-t border-slate-100 flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-xs text-slate-400">
+                            <span className="bg-slate-100 px-2 py-1 rounded font-medium uppercase text-slate-600">{note.fileType}</span>
+                            <span>{note.size}</span>
+                          </div>
+                          <button 
+                            onClick={() => setActiveNote(note)}
+                            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-3.5 py-2 rounded-xl transition shadow-sm cursor-pointer"
+                          >
+                            <i data-lucide="file-text" className="w-4 h-4"></i>
+                            <span>Abrir y Estudiar</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="col-span-full py-16 text-center space-y-3">
+                      <i data-lucide="file-text" className="w-12 h-12 text-slate-300 mx-auto"></i>
+                      <p className="text-slate-600 font-medium">No se han encontrado apuntes.</p>
+                    </div>
+                  )}
+                </div>
+              </main>
+
+              {isModalOpen && (
+                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                  <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-xl space-y-6">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-xl font-bold text-slate-900">Añadir PDF a Apuntoteca</h2>
+                      <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer">
+                        <i data-lucide="x" className="w-5 h-5"></i>
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleUploadSubmit} className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Título del apunte</label>
+                        <input 
+                          type="text" 
+                          required
+                          placeholder="Ej: Resumen Tema 2"
+                          value={newTitle}
+                          onChange={(e) => setNewTitle(e.target.value)}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Asignatura</label>
+                        <select 
+                          value={newSubject}
+                          onChange={(e) => setNewSubject(e.target.value)}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white"
+                        >
+                          {subjects.filter(s => s !== 'Todas').map(s => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Tu Nombre / Autor</label>
+                        <input 
+                          type="text" 
+                          required
+                          placeholder="Ej: Tu Nombre"
+                          value={newAuthor}
+                          onChange={(e) => setNewAuthor(e.target.value)}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Archivo PDF</label>
+                        <input 
+                          type="file" 
+                          accept=".pdf"
+                          required
+                          className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 cursor-pointer"
+                        />
+                      </div>
+
+                      <div className="pt-2 flex items-center justify-end gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setIsModalOpen(false)}
+                          className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-medium text-sm cursor-pointer"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="submit"
+                          className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium text-sm shadow-sm cursor-pointer"
+                        >
+                          Subir a Apuntoteca
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+
+              <footer className="bg-white border-t border-slate-200 py-6 mt-12 text-center text-sm text-slate-500">
+                <p>📚 <strong>Apuntoteca</strong> — Tu plataforma de estudio interactiva.</p>
+              </footer>
+            </div>
+          );
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
